@@ -189,6 +189,10 @@ unsafe fn lookup_account_sid(sid: PSID) -> Result<(Vec<u16>, Vec<u16>), std::io:
         // Assumptions:
         // - sid is a valid pointer to a SID data structure
         // - name_size and domain_size accurately reflect the sizes
+        //
+        // TODO: maybe we can save time here by using `LookupAccountSidLocalW`
+        // which was added to the win32metadata in win32metadata#950 and
+        // hopefully will be available in the next release of windows-rs
         let result = Security::LookupAccountSidW(
             None,
             sid,
