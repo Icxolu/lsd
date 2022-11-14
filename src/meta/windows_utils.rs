@@ -23,48 +23,11 @@ pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
     // - LocalFree must be called before returning
     // - No pointer is valid after the call to LocalFree
 
-    let windows_path = buf_from_os(path.as_os_str());
+    let mut psd = SecurityDescriptor::new(path)?;
 
-    // These pointers will be populated by GetNamedSecurityInfoW
-    // sd_ptr points at a new buffer that must be freed
-    // The others point at (opaque) things inside that buffer
-    let mut owner_sid_ptr = MaybeUninit::uninit();
-    let mut group_sid_ptr = MaybeUninit::uninit();
-    let mut psd_ptr = MaybeUninit::uninit();
-
-    // Assumptions:
-    // - windows_path is a null-terminated WTF-16-encoded string
-    // - The return value is checked against ERROR_SUCCESS before pointers are used
-    // - All pointers are opaque and should only be used with WinAPI calls
-    // - Pointers are only valid if their corresponding X_SECURITY_INFORMATION
-    //   flags are set
-    // - sd_ptr must be freed with LocalFree
-    let error_code = unsafe {
-        Security::Authorization::GetNamedSecurityInfoW(
-            windows::core::PCWSTR::from_raw(windows_path.as_ptr()),
-            Security::Authorization::SE_FILE_OBJECT,
-            Security::OWNER_SECURITY_INFORMATION | Security::GROUP_SECURITY_INFORMATION,
-            Some(owner_sid_ptr.as_mut_ptr()),
-            Some(group_sid_ptr.as_mut_ptr()),
-            None,
-            None,
-            psd_ptr.as_mut_ptr(),
-        )
-    };
-
-    if error_code.is_err() {
-        return Err(std::io::Error::from_raw_os_error(error_code.0 as i32));
-    }
-
-    // Assumptions:
-    // - owner_sid_ptr is valid
-    // - group_sid_ptr is valid
-    // (both OK because GetNamedSecurityInfoW returned success)
-    let owner_sid_ptr = unsafe { owner_sid_ptr.assume_init() };
-    let group_sid_ptr = unsafe { group_sid_ptr.assume_init() };
-    let psd = unsafe { psd_ptr.assume_init() };
-
-    let owner = match unsafe { lookup_account_sid(owner_sid_ptr) } {
+    // SAFETY: the sid is valid until `psd` drops, which is at the end of the
+    // function
+    let owner = match unsafe { lookup_account_sid(psd.owner_sid()) } {
         Ok((n, d)) => {
             let owner_name = os_from_buf(&n);
             let owner_domain = os_from_buf(&d);
@@ -78,7 +41,9 @@ pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
         Err(_) => String::from("-"),
     };
 
-    let group = match unsafe { lookup_account_sid(group_sid_ptr) } {
+    // SAFETY: the sid is valid until `psd` drops, which is at the end of the
+    // function
+    let group = match unsafe { lookup_account_sid(psd.group_sid()) } {
         Ok((n, d)) => {
             let group_name = os_from_buf(&n);
             let group_domain = os_from_buf(&d);
@@ -111,33 +76,22 @@ pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
     //   world_sid
     // - world_sid is appropriately aligned (if there are strange crashes this
     //   might be why)
-    let result = unsafe {
+    unsafe {
         Security::CreateWellKnownSid(
             Security::WinWorldSid,
             PSID::default(),
             world_sid_ptr,
             &mut world_sid_len,
         )
-    };
-
-    if result.ok().is_err() {
-        // Failed to create the SID
-        // Assumptions: Same as the other identical calls
-        unsafe {
-            windows::Win32::System::Memory::LocalFree(psd.0 as _);
-        }
-
-        // Assumptions: None (GetLastError shouldn't ever fail)
-        return Err(io::Error::from_raw_os_error(unsafe {
-            windows::Win32::Foundation::GetLastError().0
-        } as i32));
     }
-    // Assumptions:
-    // - xxxxx_trustee are still valid (including underlying SID)
-    // - dacl_ptr is still valid
-    let owner_access_mask = unsafe { get_acl_access_mask(owner_sid_ptr, psd) }?;
-    let group_access_mask = unsafe { get_acl_access_mask(group_sid_ptr, psd) }?;
-    let world_access_mask = unsafe { get_acl_access_mask(world_sid_ptr, psd) }?;
+    .ok()?;
+
+    // SAFETY:
+    // The `sid`s are valid for until the end of this function, when `psd` and
+    // `world_sid` drop
+    let owner_access_mask = unsafe { get_acl_access_mask(psd.owner_sid(), &mut psd) }?;
+    let group_access_mask = unsafe { get_acl_access_mask(psd.group_sid(), &mut psd) }?;
+    let world_access_mask = unsafe { get_acl_access_mask(world_sid_ptr, &mut psd) }?;
 
     let permissions = {
         use windows::Win32::Storage::FileSystem::{
@@ -163,36 +117,24 @@ pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
         }
     };
 
-    // Assumptions:
-    // - sd_ptr was previously allocated with WinAPI functions
-    // - All pointers into the memory are now invalid
-    // - The free succeeds (currently unchecked -- there's no real recovery
-    //   options. It's not much memory, so leaking it on failure is
-    //   *probably* fine)
-    unsafe {
-        windows::Win32::System::Memory::LocalFree(psd.0 as _);
-    }
-
     Ok((owner, permissions))
 }
 
-unsafe fn get_acl_access_mask<P>(
-    psid: P,
-    psd: Security::PSECURITY_DESCRIPTOR,
-) -> Result<u32, io::Error>
+/// SAFETY: `psid` is valid for the entire function execution
+unsafe fn get_acl_access_mask<P>(psid: P, psd: &mut SecurityDescriptor) -> Result<u32, io::Error>
 where
     P: Into<PSID>,
 {
     let mut manager = AuthzResourceManager::new()?;
-    let mut context = AuthzClientContext::new(&mut manager, psid)?;
+    let mut context = AuthzClientContext::new(&mut manager, psid.into())?;
     let mask = authz_access_check(&mut context, psd)?;
 
     Ok(mask)
 }
 
-unsafe fn authz_access_check(
+fn authz_access_check(
     context: &mut AuthzClientContext,
-    psd: Security::PSECURITY_DESCRIPTOR,
+    psd: &mut SecurityDescriptor,
 ) -> Result<u32, io::Error> {
     let prequest = Security::Authorization::AUTHZ_ACCESS_REQUEST {
         DesiredAccess: windows::Win32::System::SystemServices::MAXIMUM_ALLOWED,
@@ -203,20 +145,23 @@ unsafe fn authz_access_check(
     let mut preply = Security::Authorization::AUTHZ_ACCESS_REPLY {
         ResultListLength: 1,
         GrantedAccessMask: buffer.as_mut_ptr(),
-        Error: buffer.as_mut_ptr().offset(1),
+        // SAFETY: The resulting pointer is in bounds and the offset doesnt overflow an isize
+        Error: unsafe { buffer.as_mut_ptr().offset(1) },
         ..Default::default()
     };
 
-    Security::Authorization::AuthzAccessCheck(
-        Security::Authorization::AUTHZ_ACCESS_CHECK_FLAGS::default(),
-        context.0,
-        &prequest,
-        None,
-        psd,
-        None,
-        &mut preply,
-        None,
-    )
+    unsafe {
+        Security::Authorization::AuthzAccessCheck(
+            Security::Authorization::AUTHZ_ACCESS_CHECK_FLAGS::default(),
+            context.0,
+            &prequest,
+            None,
+            psd.psd,
+            None,
+            &mut preply,
+            None,
+        )
+    }
     .ok()?;
 
     Ok(buffer[0])
@@ -369,14 +314,11 @@ struct AuthzClientContext<'a>(
 impl<'a> AuthzClientContext<'a> {
     /// SAFETY:
     /// psid is valid for the lifetime of the context
-    unsafe fn new<P>(manager: &'a mut AuthzResourceManager, psid: P) -> Result<Self, io::Error>
-    where
-        P: Into<PSID>,
-    {
+    unsafe fn new(manager: &'a mut AuthzResourceManager, sid: PSID) -> Result<Self, io::Error> {
         let mut handle = Security::Authorization::AUTHZ_CLIENT_CONTEXT_HANDLE::default();
         Security::Authorization::AuthzInitializeContextFromSid(
             0,
-            psid.into(),
+            sid,
             manager.0,
             None,
             Default::default(),
@@ -392,6 +334,62 @@ impl<'a> AuthzClientContext<'a> {
 impl<'a> Drop for AuthzClientContext<'a> {
     fn drop(&mut self) {
         let _ = unsafe { Security::Authorization::AuthzFreeContext(self.0) };
+    }
+}
+
+struct SecurityDescriptor {
+    owner_sid: PSID,
+    group_sid: PSID,
+    // drop the psd last, since the SIDs point into it
+    psd: Security::PSECURITY_DESCRIPTOR,
+}
+
+impl SecurityDescriptor {
+    fn new(path: &Path) -> Result<Self, io::Error> {
+        let windows_path = buf_from_os(path.as_os_str());
+        let mut owner_sid = Default::default();
+        let mut group_sid = Default::default();
+        let mut psd = Security::PSECURITY_DESCRIPTOR::default();
+
+        unsafe {
+            Security::Authorization::GetNamedSecurityInfoW(
+                windows::core::PCWSTR::from_raw(windows_path.as_ptr()),
+                Security::Authorization::SE_FILE_OBJECT,
+                Security::OWNER_SECURITY_INFORMATION | Security::GROUP_SECURITY_INFORMATION,
+                Some(&mut owner_sid),
+                Some(&mut group_sid),
+                None,
+                None,
+                &mut psd,
+            )
+        }
+        .ok()?;
+
+        Ok(Self {
+            owner_sid,
+            group_sid,
+            psd,
+        })
+    }
+
+    /// SAFETY:  
+    /// The returned [`PSID`] must only be used during the lifetime of the
+    /// [`SecurityDescriptor`]
+    unsafe fn owner_sid(&mut self) -> PSID {
+        self.owner_sid
+    }
+
+    /// SAFETY:  
+    /// The returned [`PSID`] must only be used during the lifetime of the
+    /// [`SecurityDescriptor`]
+    unsafe fn group_sid(&mut self) -> PSID {
+        self.group_sid
+    }
+}
+
+impl Drop for SecurityDescriptor {
+    fn drop(&mut self) {
+        let _ = unsafe { windows::Win32::System::Memory::LocalFree(self.psd.0 as _) };
     }
 }
 
