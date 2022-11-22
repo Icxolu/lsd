@@ -11,154 +11,143 @@ use super::{Owner, Permissions};
 
 const BUF_SIZE: u32 = 256;
 
-pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
-    // Overall design:
-    // This function allocates some data with GetNamedSecurityInfoW,
-    // manipulates it only through WinAPI calls (treating the pointers as
-    // opaque) and then frees it at the end with LocalFree.
-    //
-    // For memory safety, the critical things are:
-    // - No pointer is valid before the return value of GetNamedSecurityInfoW
-    //   is checked
-    // - LocalFree must be called before returning
-    // - No pointer is valid after the call to LocalFree
+pub(super) struct SecurityInfo {
+    owner_sid_ptr: PSID,
+    group_sid_ptr: PSID,
+    dacl_ptr: *mut ACL,
+    sd_ptr: Security::PSECURITY_DESCRIPTOR,
+}
 
-    let windows_path = buf_from_os(path.as_os_str());
+impl SecurityInfo {
+    pub(super) fn new(path: &Path) -> io::Result<Self> {
+        let windows_path = buf_from_os(path.as_os_str());
 
-    // These pointers will be populated by GetNamedSecurityInfoW
-    // sd_ptr points at a new buffer that must be freed
-    // The others point at (opaque) things inside that buffer
-    let mut owner_sid_ptr = MaybeUninit::uninit();
-    let mut group_sid_ptr = MaybeUninit::uninit();
-    let mut dacl_ptr = MaybeUninit::uninit();
-    let mut sd_ptr = MaybeUninit::uninit();
+        let mut owner_sid_ptr = MaybeUninit::uninit();
+        let mut group_sid_ptr = MaybeUninit::uninit();
+        let mut dacl_ptr = MaybeUninit::uninit();
+        let mut sd_ptr = MaybeUninit::uninit();
 
-    // Assumptions:
-    // - windows_path is a null-terminated WTF-16-encoded string
-    // - The return value is checked against ERROR_SUCCESS before pointers are used
-    // - All pointers are opaque and should only be used with WinAPI calls
-    // - Pointers are only valid if their corresponding X_SECURITY_INFORMATION
-    //   flags are set
-    // - sd_ptr must be freed with LocalFree
-    let error_code = unsafe {
-        Security::Authorization::GetNamedSecurityInfoW(
-            windows::core::PCWSTR::from_raw(windows_path.as_ptr()),
-            Security::Authorization::SE_FILE_OBJECT,
-            Security::OWNER_SECURITY_INFORMATION
-                | Security::GROUP_SECURITY_INFORMATION
-                | Security::DACL_SECURITY_INFORMATION,
-            Some(owner_sid_ptr.as_mut_ptr()),
-            Some(group_sid_ptr.as_mut_ptr()),
-            Some(dacl_ptr.as_mut_ptr()),
-            None,
-            sd_ptr.as_mut_ptr(),
-        )
-    };
-
-    if error_code.is_err() {
-        return Err(std::io::Error::from_raw_os_error(error_code.0 as i32));
-    }
-
-    // Assumptions:
-    // - owner_sid_ptr is valid
-    // - group_sid_ptr is valid
-    // (both OK because GetNamedSecurityInfoW returned success)
-    let owner_sid_ptr = unsafe { owner_sid_ptr.assume_init() };
-    let group_sid_ptr = unsafe { group_sid_ptr.assume_init() };
-    let dacl_ptr = unsafe { dacl_ptr.assume_init() };
-    let sd_ptr = unsafe { sd_ptr.assume_init() };
-
-    let owner = match unsafe { lookup_account_sid(owner_sid_ptr) } {
-        Ok((n, d)) => {
-            let owner_name = os_from_buf(&n);
-            let owner_domain = os_from_buf(&d);
-
-            format!(
-                "{}\\{}",
-                owner_domain.to_string_lossy(),
-                &owner_name.to_string_lossy()
-            )
-        }
-        Err(_) => String::from("-"),
-    };
-
-    let group = match unsafe { lookup_account_sid(group_sid_ptr) } {
-        Ok((n, d)) => {
-            let group_name = os_from_buf(&n);
-            let group_domain = os_from_buf(&d);
-
-            format!(
-                "{}\\{}",
-                group_domain.to_string_lossy(),
-                &group_name.to_string_lossy()
-            )
-        }
-        Err(_) => String::from("-"),
-    };
-
-    // This structure will be returned
-    let owner = Owner::new(owner, group);
-
-    // Get the size and allocate bytes for a 1-sub-authority SID
-    // 1 sub-authority because the Windows World SID is always S-1-1-0, with
-    // only a single sub-authority.
-    //
-    // Assumptions: None
-    // "This function cannot fail"
-    //     -- Windows Dev Center docs
-    let mut world_sid_len: u32 = unsafe { Security::GetSidLengthRequired(1) };
-    let mut world_sid = vec![0u8; world_sid_len as usize];
-    let world_sid_ptr = PSID(world_sid.as_mut_ptr() as *mut _);
-
-    // Assumptions:
-    // - world_sid_len is no larger than the number of bytes available at
-    //   world_sid
-    // - world_sid is appropriately aligned (if there are strange crashes this
-    //   might be why)
-    let result = unsafe {
-        Security::CreateWellKnownSid(
-            Security::WinWorldSid,
-            PSID::default(),
-            world_sid_ptr,
-            &mut world_sid_len,
-        )
-    };
-
-    if result.ok().is_err() {
-        // Failed to create the SID
-        // Assumptions: Same as the other identical calls
+        // Assumptions:
+        // - windows_path is a null-terminated WTF-16-encoded string
+        // - The return value is checked against ERROR_SUCCESS before pointers are used
+        // - All pointers are opaque and should only be used with WinAPI calls
+        // - Pointers are only valid if their corresponding X_SECURITY_INFORMATION
+        //   flags are set
+        // - sd_ptr must be freed with LocalFree
         unsafe {
-            windows::Win32::System::Memory::LocalFree(sd_ptr.0 as _);
+            Security::Authorization::GetNamedSecurityInfoW(
+                windows::core::PCWSTR::from_raw(windows_path.as_ptr()),
+                Security::Authorization::SE_FILE_OBJECT,
+                Security::OWNER_SECURITY_INFORMATION
+                    | Security::GROUP_SECURITY_INFORMATION
+                    | Security::DACL_SECURITY_INFORMATION,
+                Some(owner_sid_ptr.as_mut_ptr()),
+                Some(group_sid_ptr.as_mut_ptr()),
+                Some(dacl_ptr.as_mut_ptr()),
+                None,
+                sd_ptr.as_mut_ptr(),
+            )
         }
+        .ok()?;
 
-        // Assumptions: None (GetLastError shouldn't ever fail)
-        return Err(io::Error::from_raw_os_error(unsafe {
-            windows::Win32::Foundation::GetLastError().0
-        } as i32));
+        // Assumptions:
+        // - owner_sid_ptr is valid
+        // - group_sid_ptr is valid
+        // (both OK because GetNamedSecurityInfoW returned success)
+        let owner_sid_ptr = unsafe { owner_sid_ptr.assume_init() };
+        let group_sid_ptr = unsafe { group_sid_ptr.assume_init() };
+        let dacl_ptr = unsafe { dacl_ptr.assume_init() };
+        let sd_ptr = unsafe { sd_ptr.assume_init() };
+
+        Ok(Self {
+            owner_sid_ptr,
+            group_sid_ptr,
+            dacl_ptr,
+            sd_ptr,
+        })
     }
 
-    // Assumptions:
-    // - xxxxx_sid_ptr are valid pointers to SIDs
-    // - xxxxx_trustee is only valid as long as its SID pointer is
-    let owner_trustee = unsafe { trustee_from_sid(owner_sid_ptr) };
-    let group_trustee = unsafe { trustee_from_sid(group_sid_ptr) };
-    let world_trustee = unsafe { trustee_from_sid(world_sid_ptr) };
+    pub(super) fn owner(&mut self) -> Owner {
+        let owner = match unsafe { lookup_account_sid(self.owner_sid_ptr) } {
+            Ok((n, d)) => {
+                let owner_name = os_from_buf(&n);
+                let owner_domain = os_from_buf(&d);
 
-    // Assumptions:
-    // - xxxxx_trustee are still valid (including underlying SID)
-    // - dacl_ptr is still valid
-    let owner_access_mask = unsafe { get_acl_access_mask(dacl_ptr, &owner_trustee) }?;
+                format!(
+                    "{}\\{}",
+                    owner_domain.to_string_lossy(),
+                    &owner_name.to_string_lossy()
+                )
+            }
+            Err(_) => String::from("-"),
+        };
 
-    let group_access_mask = unsafe { get_acl_access_mask(dacl_ptr, &group_trustee) }?;
+        let group = match unsafe { lookup_account_sid(self.group_sid_ptr) } {
+            Ok((n, d)) => {
+                let group_name = os_from_buf(&n);
+                let group_domain = os_from_buf(&d);
 
-    let world_access_mask = unsafe { get_acl_access_mask(dacl_ptr, &world_trustee) }?;
+                format!(
+                    "{}\\{}",
+                    group_domain.to_string_lossy(),
+                    &group_name.to_string_lossy()
+                )
+            }
+            Err(_) => String::from("-"),
+        };
 
-    let permissions = {
+        Owner::new(owner, group)
+    }
+
+    pub(super) fn permissions(&mut self) -> io::Result<Permissions> {
         use windows::Win32::Storage::FileSystem::{
             FILE_ACCESS_FLAGS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
         };
+
+        // Get the size and allocate bytes for a 1-sub-authority SID
+        // 1 sub-authority because the Windows World SID is always S-1-1-0, with
+        // only a single sub-authority.
+        //
+        // Assumptions: None
+        // "This function cannot fail"
+        //     -- Windows Dev Center docs
+        let mut world_sid_len: u32 = unsafe { Security::GetSidLengthRequired(1) };
+        let mut world_sid = vec![0u8; world_sid_len as usize];
+        let world_sid_ptr = PSID(world_sid.as_mut_ptr() as *mut _);
+
+        // Assumptions:
+        // - world_sid_len is no larger than the number of bytes available at
+        //   world_sid
+        // - world_sid is appropriately aligned (if there are strange crashes this
+        //   might be why)
+        unsafe {
+            Security::CreateWellKnownSid(
+                Security::WinWorldSid,
+                PSID::default(),
+                world_sid_ptr,
+                &mut world_sid_len,
+            )
+        }
+        .ok()?;
+
+        // Assumptions:
+        // - xxxxx_sid_ptr are valid pointers to SIDs
+        // - xxxxx_trustee is only valid as long as its SID pointer is
+        let owner_trustee = unsafe { trustee_from_sid(self.owner_sid_ptr) };
+        let group_trustee = unsafe { trustee_from_sid(self.group_sid_ptr) };
+        let world_trustee = unsafe { trustee_from_sid(world_sid_ptr) };
+
+        // Assumptions:
+        // - xxxxx_trustee are still valid (including underlying SID)
+        // - dacl_ptr is still valid
+        let owner_access_mask = unsafe { get_acl_access_mask(self.dacl_ptr, &owner_trustee) }?;
+
+        let group_access_mask = unsafe { get_acl_access_mask(self.dacl_ptr, &group_trustee) }?;
+
+        let world_access_mask = unsafe { get_acl_access_mask(self.dacl_ptr, &world_trustee) }?;
+
         let has_bit = |field: u32, bit: FILE_ACCESS_FLAGS| field & bit.0 != 0;
-        Permissions {
+        Ok(Permissions {
             user_read: has_bit(owner_access_mask, FILE_GENERIC_READ),
             user_write: has_bit(owner_access_mask, FILE_GENERIC_WRITE),
             user_execute: has_bit(owner_access_mask, FILE_GENERIC_EXECUTE),
@@ -174,20 +163,16 @@ pub fn get_file_data(path: &Path) -> Result<(Owner, Permissions), io::Error> {
             sticky: false,
             setuid: false,
             setgid: false,
-        }
-    };
-
-    // Assumptions:
-    // - sd_ptr was previously allocated with WinAPI functions
-    // - All pointers into the memory are now invalid
-    // - The free succeeds (currently unchecked -- there's no real recovery
-    //   options. It's not much memory, so leaking it on failure is
-    //   *probably* fine)
-    unsafe {
-        windows::Win32::System::Memory::LocalFree(sd_ptr.0 as _);
+        })
     }
+}
 
-    Ok((owner, permissions))
+impl Drop for SecurityInfo {
+    fn drop(&mut self) {
+        unsafe {
+            windows::Win32::System::Memory::LocalFree(self.sd_ptr.0 as _);
+        }
+    }
 }
 
 /// Evaluate an ACL for a particular trustee and get its access rights
