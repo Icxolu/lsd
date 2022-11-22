@@ -303,44 +303,96 @@ fn buf_from_os(os: &OsStr) -> Vec<u16> {
     buf
 }
 
-/// Checks wether the given [`FILE_FLAGS_AND_ATTRIBUTES`] are set for the given
-/// [`Path`]
-///
-/// [`FILE_FLAGS_AND_ATTRIBUTES`]: windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES
+#[enumflags2::bitflags]
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileAttributes {
+    /// This file is marked to be included in incremental backup operation.
+    /// Windows sets this attribute whenever the file is modified, and backup
+    /// software should clear it when processing the file during incremental
+    /// backup.
+    Archive = 32,
+    /// The file is compressed.
+    Compressed = 2048,
+    /// The file is a directory.
+    Directory = 16,
+    /// The file or directory is encrypted. For a file, this means that all data
+    /// in the file is encrypted. For a directory, this means that encryption is
+    /// the default for newly created files and directories.
+    Encrypted = 16384,
+    /// The file is hidden, and thus is not included in an ordinary directory
+    /// listing.
+    Hidden = 2,
+    /// The file will not be indexed by the operating system's content indexing
+    /// service.
+    NotContentIndexed = 8192,
+    /// The file is offline. The data of the file is not immediately available.
+    Offline = 4096,
+    /// The file is read-only.
+    ReadOnly = 1,
+    /// The file contains a reparse point, which is a block of user-defined data
+    /// associated with a file or a directory.
+    ReparsePoint = 1024,
+    /// The file is a system file. That is, the file is part of the operating
+    /// system or is used exclusively by the operating system.
+    System = 4,
+    /// The file is temporary. A temporary file contains data that is needed
+    /// while an application is executing but is not needed after the
+    /// application is finished. File systems try to keep all the data in memory
+    /// for quicker access rather than flushing the data back to mass storage. A
+    /// temporary file should be deleted by the application as soon as it is no
+    /// longer needed.
+    Temporary = 256,
+}
+
+/// Returns the [FileAttributes] that are set for the given [`Path`]
 #[inline]
-fn has_path_attribute(
-    path: &Path,
-    flags: windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES,
-) -> bool {
+pub(crate) fn get_path_attributes(path: &Path) -> enumflags2::BitFlags<FileAttributes> {
     let windows_path = buf_from_os(path.as_os_str());
     let file_attributes = unsafe {
         windows::Win32::Storage::FileSystem::GetFileAttributesW(windows::core::PCWSTR(
             windows_path.as_ptr(),
         ))
     };
-    file_attributes & flags.0 > 0
+
+    enumflags2::BitFlags::from_bits_truncate(file_attributes)
+}
+
+#[cfg(test)]
+#[inline]
+pub(crate) fn set_path_attributes<B>(path: &Path, attributes: B) -> io::Result<()>
+where
+    B: Into<enumflags2::BitFlags<FileAttributes>>,
+{
+    let windows_path = buf_from_os(path.as_os_str());
+    unsafe {
+        windows::Win32::Storage::FileSystem::SetFileAttributesW(
+            windows::core::PCWSTR(windows_path.as_ptr()),
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(
+                attributes.into().bits(),
+            ),
+        )
+    }
+    .ok()
+    .map_err(Into::into)
 }
 
 /// Checks whether the windows [`hidden`] attribute is set for the given
 /// [`Path`]
 ///
 /// [`hidden`]: windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_HIDDEN
+#[inline]
 pub fn is_path_hidden(path: &Path) -> bool {
-    has_path_attribute(
-        path,
-        windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_HIDDEN,
-    )
+    get_path_attributes(path).contains(FileAttributes::Hidden)
 }
 
 /// Checks whether the windows [`system`] attribute is set for the given
 /// [`Path`]
 ///
 /// [`system`]: windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SYSTEM
+#[inline]
 pub fn is_path_system(path: &Path) -> bool {
-    has_path_attribute(
-        path,
-        windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SYSTEM,
-    )
+    get_path_attributes(path).contains(FileAttributes::System)
 }
 
 #[cfg(test)]
