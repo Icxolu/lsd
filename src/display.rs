@@ -306,6 +306,14 @@ fn get_output(
                     meta.access_control.render_method(colors),
                 ]);
             }
+            #[cfg(windows)]
+            Block::Mode => {
+                block_vec.extend([
+                    meta.file_type.render(colors),
+                    meta.mode.render(colors, flags),
+                    meta.access_control.render_method(colors),
+                ]);
+            }
             Block::User => block_vec.push(meta.owner.render_user(colors)),
             Block::Group => block_vec.push(meta.owner.render_group(colors)),
             Block::Context => block_vec.push(meta.access_control.render_context(colors)),
@@ -762,7 +770,6 @@ mod tests {
         );
 
         dir.close().unwrap();
-
         assert!(output.contains("Permissions"));
         assert!(output.contains("User"));
         assert!(output.contains("Group"));

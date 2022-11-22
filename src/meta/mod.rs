@@ -4,6 +4,8 @@ mod filetype;
 mod indicator;
 mod inode;
 mod links;
+#[cfg(windows)]
+mod mode;
 pub mod name;
 mod owner;
 mod permissions;
@@ -19,6 +21,8 @@ pub use self::filetype::FileType;
 pub use self::indicator::Indicator;
 pub use self::inode::INode;
 pub use self::links::Links;
+#[cfg(windows)]
+pub use self::mode::Mode;
 pub use self::name::Name;
 pub use self::owner::Owner;
 pub use self::permissions::Permissions;
@@ -37,6 +41,8 @@ pub struct Meta {
     pub name: Name,
     pub path: PathBuf,
     pub permissions: Permissions,
+    #[cfg(windows)]
+    pub mode: Mode,
     pub date: Date,
     pub owner: Owner,
     pub file_type: FileType,
@@ -252,6 +258,9 @@ impl Meta {
         #[cfg(windows)]
         let (owner, permissions) = windows_utils::get_file_data(path)?;
 
+        #[cfg(windows)]
+        let mode = Mode::from(path);
+
         let access_control = AccessControl::for_path(path);
 
         #[cfg(not(windows))]
@@ -274,6 +283,8 @@ impl Meta {
             indicator: Indicator::from(file_type),
             owner,
             permissions,
+            #[cfg(windows)]
+            mode,
             name,
             file_type,
             content: None,

@@ -275,8 +275,10 @@ pub fn build() -> App<'static> {
                 .takes_value(true)
                 .use_value_delimiter(true)
                 .require_delimiter(true)
-                .possible_values(&[
+                .possible_values([
                     "permission",
+                    #[cfg(windows)]
+                    "mode",
                     "user",
                     "group",
                     "context",

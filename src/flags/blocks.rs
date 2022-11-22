@@ -167,6 +167,8 @@ impl Default for Blocks {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Block {
     Permission,
+    #[cfg(windows)]
+    Mode,
     User,
     Group,
     Context,
@@ -184,6 +186,8 @@ impl Block {
             Block::INode => "INode",
             Block::Links => "Links",
             Block::Permission => "Permissions",
+            #[cfg(windows)]
+            Block::Mode => "Mode",
             Block::User => "User",
             Block::Group => "Group",
             Block::Context => "Context",
@@ -201,6 +205,8 @@ impl TryFrom<&str> for Block {
     fn try_from(string: &str) -> Result<Self, Self::Error> {
         match string {
             "permission" => Ok(Self::Permission),
+            #[cfg(windows)]
+            "mode" => Ok(Self::Mode),
             "user" => Ok(Self::User),
             "group" => Ok(Self::Group),
             "context" => Ok(Self::Context),
@@ -540,6 +546,8 @@ mod test_block {
         assert_eq!(Block::INode.get_header(), "INode");
         assert_eq!(Block::Links.get_header(), "Links");
         assert_eq!(Block::Permission.get_header(), "Permissions");
+        #[cfg(windows)]
+        assert_eq!(Block::Mode.get_header(), "Mode");
         assert_eq!(Block::User.get_header(), "User");
         assert_eq!(Block::Group.get_header(), "Group");
         assert_eq!(Block::Context.get_header(), "Context");
