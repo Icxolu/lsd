@@ -90,6 +90,7 @@ pub struct ColorTheme {
     #[serde(deserialize_with = "deserialize_color")]
     pub group: Color,
     pub permission: Permission,
+    pub mode: Mode,
     pub date: Date,
     pub size: Size,
     pub inode: INode,
@@ -122,6 +123,31 @@ pub struct Permission {
     pub acl: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub context: Color,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+#[serde(default)]
+pub struct Mode {
+    #[serde(deserialize_with = "deserialize_color")]
+    pub archive: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub read_only: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub hidden: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub compressed: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub encrypted: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub temporary: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub not_content_indexed: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub system: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub offline: Color,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -247,6 +273,23 @@ impl Default for Permission {
         }
     }
 }
+
+impl Default for Mode {
+    fn default() -> Self {
+        Self {
+            archive: Color::Green,
+            read_only: Color::Red,
+            hidden: Color::DarkGrey,
+            compressed: Color::Blue,
+            encrypted: Color::Yellow,
+            temporary: Color::DarkGreen,
+            not_content_indexed: Color::DarkRed,
+            system: Color::DarkGrey,
+            offline: Color::DarkGrey,
+        }
+    }
+}
+
 impl Default for FileType {
     fn default() -> Self {
         FileType {
@@ -337,6 +380,7 @@ impl ColorTheme {
             user: Color::AnsiValue(230),  // Cornsilk1
             group: Color::AnsiValue(187), // LightYellow3
             permission: Permission::default(),
+            mode: Mode::default(),
             file_type: FileType::default(),
             date: Date::default(),
             size: Size::default(),

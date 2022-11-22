@@ -36,6 +36,17 @@ pub enum Elem {
     Acl,
     Context,
 
+    /// Mode
+    Archive,
+    ReadOnly,
+    Hidden,
+    Compressed,
+    Encrypted,
+    Temporary,
+    NotContentIndexed,
+    System,
+    Offline,
+
     /// Last Time Modified
     DayOld,
     HourOld,
@@ -105,6 +116,16 @@ impl Elem {
             Elem::Octal => theme.permission.octal,
             Elem::Acl => theme.permission.acl,
             Elem::Context => theme.permission.context,
+
+            Elem::Archive => theme.mode.archive,
+            Elem::ReadOnly => theme.mode.read_only,
+            Elem::Hidden => theme.mode.hidden,
+            Elem::Compressed => theme.mode.compressed,
+            Elem::Encrypted => theme.mode.encrypted,
+            Elem::Temporary => theme.mode.temporary,
+            Elem::NotContentIndexed => theme.mode.not_content_indexed,
+            Elem::System => theme.mode.system,
+            Elem::Offline => theme.mode.offline,
 
             Elem::DayOld => theme.date.day_old,
             Elem::HourOld => theme.date.hour_old,
@@ -346,6 +367,17 @@ mod elem {
                 octal: Color::AnsiValue(6),
                 acl: Color::DarkCyan,
                 context: Color::Cyan,
+            },
+            mode: color::Mode {
+                archive: Color::Green,
+                read_only: Color::Red,
+                hidden: Color::DarkGrey,
+                compressed: Color::Blue,
+                encrypted: Color::Yellow,
+                temporary: Color::DarkGreen,
+                not_content_indexed: Color::DarkRed,
+                system: Color::DarkGrey,
+                offline: Color::DarkGrey,
             },
             file_type: color::FileType {
                 file: color::File {
