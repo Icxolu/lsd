@@ -67,6 +67,11 @@ impl Blocks {
             None => self.0.insert(0, Block::Context),
         }
     }
+
+    #[cfg(windows)]
+    pub fn contains(&self, block: &Block) -> bool {
+        self.0.contains(block)
+    }
 }
 
 impl Configurable<Self> for Blocks {

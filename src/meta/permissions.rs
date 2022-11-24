@@ -2,7 +2,7 @@ use crate::color::{ColoredString, Colors, Elem};
 use crate::flags::{Flags, PermissionFlag};
 use std::fs::Metadata;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Default)]
 pub struct Permissions {
     pub user_read: bool,
     pub user_write: bool,

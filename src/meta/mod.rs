@@ -255,7 +255,19 @@ impl Meta {
         let permissions = Permissions::from(&metadata);
 
         #[cfg(windows)]
-        let (owner, permissions) = windows_utils::get_file_data(path)?;
+        let mut sec_info = windows_utils::SecurityInfo::new(path)?;
+        #[cfg(windows)]
+        let owner = flags
+            .blocks
+            .contains(&crate::flags::Block::User)
+            .then(|| sec_info.owner())
+            .unwrap_or_else(|| Owner::new(String::from("-"), String::from("-")));
+        #[cfg(windows)]
+        let permissions = if flags.blocks.contains(&crate::flags::Block::Permission) {
+            sec_info.permissions()?
+        } else {
+            Permissions::default()
+        };
 
         #[cfg(windows)]
         let mode = Mode::from(path);
