@@ -82,12 +82,12 @@ mod tests {
         // Create the file;
         let path_a = tmp_dir.path().join("zzz");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create a dir;
         let path_z = tmp_dir.path().join("aaa");
         create_dir(&path_z).expect("failed to create dir");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.dir_grouping = DirGrouping::First;
@@ -110,12 +110,12 @@ mod tests {
         // Create the file;
         let path_a = tmp_dir.path().join("zzz");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create a dir;
         let path_z = tmp_dir.path().join("aaa");
         create_dir(&path_z).expect("failed to create dir");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.dir_grouping = DirGrouping::Last;
@@ -136,12 +136,12 @@ mod tests {
         // Create the file;
         let path_a = tmp_dir.path().join("aaa");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create a dir;
         let path_z = tmp_dir.path().join("zzz");
         create_dir(&path_z).expect("failed to create dir");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.dir_grouping = DirGrouping::None;
@@ -164,12 +164,12 @@ mod tests {
         // Create the file;
         let path_a = tmp_dir.path().join("zzz");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create a dir;
         let path_z = tmp_dir.path().join("aaa");
         create_dir(&path_z).expect("failed to create dir");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.dir_grouping = DirGrouping::None;
@@ -192,7 +192,7 @@ mod tests {
         // Create the file;
         let path_a = tmp_dir.path().join("aaa");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create the file;
         let path_z = tmp_dir.path().join("zzz");
@@ -218,7 +218,7 @@ mod tests {
             .success();
 
         assert!(success, "failed to change file timestamp");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.column = SortColumn::Time;
@@ -240,22 +240,22 @@ mod tests {
         // Create the file with rs extension;
         let path_a = tmp_dir.path().join("aaa.rs");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         // Create the file with rs extension;
         let path_z = tmp_dir.path().join("zzz.rs");
         File::create(&path_z).expect("failed to create file");
-        let meta_z = Meta::from_path(&path_z, false).expect("failed to get meta");
+        let meta_z = Meta::from_path(&path_z, &Flags::default()).expect("failed to get meta");
 
         // Create the file with js extension;
         let path_j = tmp_dir.path().join("zzz.js");
         File::create(&path_j).expect("failed to create file");
-        let meta_j = Meta::from_path(&path_j, false).expect("failed to get meta");
+        let meta_j = Meta::from_path(&path_j, &Flags::default()).expect("failed to get meta");
 
         // Create the file with txt extension;
         let path_t = tmp_dir.path().join("zzz.txt");
         File::create(&path_t).expect("failed to create file");
-        let meta_t = Meta::from_path(&path_t, false).expect("failed to get meta");
+        let meta_t = Meta::from_path(&path_t, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.column = SortColumn::Extension;
@@ -277,15 +277,15 @@ mod tests {
 
         let path_a = tmp_dir.path().join("2");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         let path_b = tmp_dir.path().join("11");
         File::create(&path_b).expect("failed to create file");
-        let meta_b = Meta::from_path(&path_b, false).expect("failed to get meta");
+        let meta_b = Meta::from_path(&path_b, &Flags::default()).expect("failed to get meta");
 
         let path_c = tmp_dir.path().join("12");
         File::create(&path_c).expect("failed to create file");
-        let meta_c = Meta::from_path(&path_c, false).expect("failed to get meta");
+        let meta_c = Meta::from_path(&path_c, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.column = SortColumn::Version;
@@ -303,19 +303,19 @@ mod tests {
 
         let path_a = tmp_dir.path().join("aaa.aa");
         File::create(&path_a).expect("failed to create file");
-        let meta_a = Meta::from_path(&path_a, false).expect("failed to get meta");
+        let meta_a = Meta::from_path(&path_a, &Flags::default()).expect("failed to get meta");
 
         let path_b = tmp_dir.path().join("aaa");
         create_dir(&path_b).expect("failed to create dir");
-        let meta_b = Meta::from_path(&path_b, false).expect("failed to get meta");
+        let meta_b = Meta::from_path(&path_b, &Flags::default()).expect("failed to get meta");
 
         let path_c = tmp_dir.path().join("zzz.zz");
         File::create(&path_c).expect("failed to create file");
-        let meta_c = Meta::from_path(&path_c, false).expect("failed to get meta");
+        let meta_c = Meta::from_path(&path_c, &Flags::default()).expect("failed to get meta");
 
         let path_d = tmp_dir.path().join("zzz");
         create_dir(&path_d).expect("failed to create dir");
-        let meta_d = Meta::from_path(&path_d, false).expect("failed to get meta");
+        let meta_d = Meta::from_path(&path_d, &Flags::default()).expect("failed to get meta");
 
         let mut flags = Flags::default();
         flags.sorting.column = SortColumn::None;

@@ -110,7 +110,7 @@ mod test {
     use super::FileType;
     use crate::color::{Colors, ThemeOption};
     #[cfg(unix)]
-    use crate::meta::Permissions;
+    use crate::meta::{Flags, Permissions};
     use crossterm::style::{Color, Stylize};
     use std::fs::File;
     #[cfg(unix)]
@@ -144,7 +144,7 @@ mod test {
     fn test_dir_type() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
         #[cfg(not(windows))]
-        let meta = crate::meta::Meta::from_path(tmp_dir.path(), false)
+        let meta = crate::meta::Meta::from_path(tmp_dir.path(), &Flags::default())
             .expect("failed to get tempdir path");
         let metadata = tmp_dir.path().metadata().expect("failed to get metas");
 

@@ -95,8 +95,7 @@ impl Meta {
             let mut current_meta = self.clone();
             current_meta.name.name = ".".to_owned();
 
-            let mut parent_meta =
-                Self::from_path(&self.path.join(Component::ParentDir), flags.dereference.0)?;
+            let mut parent_meta = Self::from_path(&self.path.join(Component::ParentDir), flags)?;
             parent_meta.name.name = "..".to_owned();
 
             content.push(current_meta);
@@ -136,7 +135,7 @@ impl Meta {
                 _ => {}
             }
 
-            let mut entry_meta = match Self::from_path(&path, flags.dereference.0) {
+            let mut entry_meta = match Self::from_path(&path, flags) {
                 Ok(res) => res,
                 Err(err) => {
                     print_error!("{}: {}.", path.display(), err);
@@ -228,13 +227,13 @@ impl Meta {
         }
     }
 
-    pub fn from_path(path: &Path, dereference: bool) -> io::Result<Self> {
+    pub fn from_path(path: &Path, flags: &Flags) -> io::Result<Self> {
         let mut metadata = path.symlink_metadata()?;
         let mut symlink_meta = None;
         if metadata.file_type().is_symlink() {
             match path.metadata() {
                 Ok(m) => {
-                    if dereference {
+                    if flags.dereference.0 {
                         metadata = m;
                     } else {
                         symlink_meta = Some(m);
@@ -243,7 +242,7 @@ impl Meta {
                 Err(e) => {
                     // This case, it is definitely a symlink or
                     // path.symlink_metadata would have errored out
-                    if dereference {
+                    if flags.dereference.0 {
                         return Err(e);
                     }
                 }
@@ -296,12 +295,13 @@ impl Meta {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use super::Flags;
     use super::Meta;
 
     #[test]
     fn test_from_path_path() {
         let dir = assert_fs::TempDir::new().unwrap();
-        let meta = Meta::from_path(dir.path(), false).unwrap();
+        let meta = Meta::from_path(dir.path(), &Flags::default()).unwrap();
         assert_eq!(meta.path, dir.path())
     }
 }

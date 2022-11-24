@@ -615,7 +615,7 @@ mod tests {
         dir.child("one.d").create_dir_all().unwrap();
         dir.child("one.d/two").touch().unwrap();
         dir.child("one.d/.hidden").touch().unwrap();
-        let mut metas = Meta::from_path(Path::new(dir.path()), false)
+        let mut metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(42, &flags)
             .unwrap()
@@ -647,7 +647,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("dir").create_dir_all().unwrap();
         dir.child("dir/file").touch().unwrap();
-        let metas = Meta::from_path(Path::new(dir.path()), false)
+        let metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(42, &flags)
             .unwrap()
@@ -687,7 +687,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("dir").create_dir_all().unwrap();
         dir.child("dir/file").touch().unwrap();
-        let metas = Meta::from_path(Path::new(dir.path()), false)
+        let metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(42, &flags)
             .unwrap()
@@ -726,7 +726,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("one.d").create_dir_all().unwrap();
         dir.child("one.d/two").touch().unwrap();
-        let metas = Meta::from_path(Path::new(dir.path()), false)
+        let metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(42, &flags)
             .unwrap()
@@ -756,7 +756,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("testdir").create_dir_all().unwrap();
         dir.child("test").touch().unwrap();
-        let metas = Meta::from_path(Path::new(dir.path()), false)
+        let metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(1, &flags)
             .unwrap()
@@ -788,7 +788,7 @@ mod tests {
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("testdir").create_dir_all().unwrap();
-        let metas = Meta::from_path(Path::new(dir.path()), false)
+        let metas = Meta::from_path(Path::new(dir.path()), &flags)
             .unwrap()
             .recurse_into(1, &flags)
             .unwrap()
